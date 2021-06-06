@@ -1,0 +1,222 @@
+{% extends "layout.html" %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-4">
+            <h2>{{ firm.name }}</h2>
+            <p>...A {{ game.name }} company</p>
+
+            <button id="run-model">Run Model</button>
+        </div>
+
+        <div class="col-md-8">
+            <div id="game-status">
+                <table class="table table-striped">
+                    <thead>
+                        <th>Firm</th>
+                        <th>Market Share</th>
+                        <th>{{ game.name }} Sold</th>
+                    </thead>
+
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="well" id="firm-status">
+
+            </div>
+        </div>
+    </div>
+
+    <h3>Current Corporate Report</h3>
+
+    <div>
+        <table class="table table-striped">
+            <thead>
+                <th>Quarter</th>
+                <th>Market Share</th>
+                <th>Total Cash</th>
+                <th>Marketing Budget</th>
+                <th>R&D Budget</th>
+                <th>Max Production Capacity</th>
+                <th>Current Production Capacity</th>
+                <th>Inventory</th>
+                <th>Cost to Make {{ game.name }}</th>
+                <th>Price of {{ game.name }}</th>
+                <th>{{ game.name }} Sold</th>
+            </thead>
+
+            <tbody id="input-table">
+                <tr id="update">
+                    <td>
+                        <button>UPDATE!</button>
+                    </td>
+                    <td></td>
+                    <td></td>
+                    <td>
+                        <input class="form-control" id="budget_marketing" name="budget_marketing" type="number">
+                    </td>
+                    <td>
+                        <input class="form-control" id="budget_research" name="budget_research" type="number">
+                    </td>
+                    <td></td>
+                    <td>
+                        <input class="form-control" id="productive_capacity" name="productive_capacity" type="number">
+                    </td>
+                    <td></td>
+                    <td></td>
+                    <td>
+                        <input class="form-control" id="unit_price" name="unit_price" type="number">
+                    </td>
+                    <td></td>
+                </tr>
+            </tbody>
+
+            <tbody id="loading-table" class="hidden">
+                <tr><td>LOADING.....</td></tr>
+            </tbody>
+
+            <tbody id="summary-table"></tbody>
+        </table>
+    </div>
+
+    <script>
+        var margin = 1;
+        var pollInterval;
+        var numStates = 0;
+
+        function formatMoney(d){
+            return "$" + d.toFixed(2);
+        }
+
+        function updateInput(selector, value){
+            $(selector).attr({
+                value: value,
+                max: value + value * margin,
+                min: value - value * margin
+            });
+        }
+
+        function updateScore(){
+            $.get('/game/{{ game.name }}/firms', function(game){
+                $("#game-status tbody").html("");
+
+                console.log(game);
+
+                game.firms.forEach(function(firm){
+                    if(!firm.isGM){
+                        $("#game-status tbody").append(
+                            "<tr><td>" + [
+                                firm.name,
+                                100 * firm.state.market_share.toFixed(2),
+                                firm.state.total_sales
+                            ].join("</td><td>") + "</td></tr>"
+                        );
+                    }
+                });
+            });
+        }
+
+        function updateMoneyPane(state){
+            var out = state.budget_marketing + state.budget_research + state.unit_cost * state.total_sales;
+            var income = state.total_sales * state.unit_price;
+
+            $("#firm-status").html(
+                "Overall Spent: $" + out.toFixed(2) +
+                "</br>" +
+                "Overall Income: $" + income.toFixed(2) +
+                "</br>" +
+                "Net Profit: $" + (income - out).toFixed()
+            );
+        }
+
+        function updateEverything(cb){
+            $.get('/firm/{{ firm._id }}/state', function(d){
+                if(d.length > numStates){
+                    var state = d[d.length - 1];
+
+                    updateMoneyPane(state);
+                    updateTable(state);
+                    updateScore();
+
+                    numStates = d.length;
+
+                    if(cb){
+                        cb();
+                    }
+                }
+            });
+        }
+
+        function getInitialStatus(){
+            $.get('/firm/{{ firm._id }}/state', function(d){
+                updateMoneyPane(d[d.length - 1]);
+
+                d.forEach(function(entry){
+                    updateTable(entry);
+                });
+            });
+
+            updateScore();
+        }
+
+        function updateTable(state){
+            $("#loading-table").addClass("hidden");
+
+            $("#summary-table").prepend(
+                "<tr><td>" + [
+                    state.turn,
+                    state.market_share.toFixed(2),
+                    formatMoney(state.total_funds),
+                    formatMoney(state.budget_marketing),
+                    formatMoney(state.budget_research),
+                    state.max_productive_rate,
+                    state.productive_capacity,
+                    state.inventory,
+                    formatMoney(state.unit_cost),
+                    formatMoney(state.unit_price),
+                    state.total_sales
+                ].join("</td><td>") + "</td></tr>"
+            );
+
+            updateInput("#budget_marketing", state.budget_marketing);
+            updateInput("#budget_research", state.budget_research);
+            updateInput("#productive_capacity", state.productive_capacity);
+            updateInput("#unit_price", state.unit_price);
+        }
+
+        getInitialStatus();
+
+        $("#update button").on("click", function(){
+            $("#loading-table").removeClass("hidden");
+
+            $.post("/firm/{{ firm.id }}/update", {
+                budget_marketing: $("#budget_marketing").val(),
+                budget_research: $("#budget_research").val(),
+                productive_capacity: $("#productive_capacity").val(),
+                unit_price: $("#unit_price").val()
+            }, function(d){
+                console.log(d);
+
+                pollInterval = window.setInterval(function(){
+                    updateEverything(function(){
+                        clearInterval(pollInterval);
+                    });
+                }, 10000);
+            });
+        });
+
+        $("#run-model").on("click", function(){
+            $.post("/gm/{{ game.name }}/run", function(d){
+                console.log(d);
+
+                updateEverything();
+            });
+        });
+    </script>
+{% endblock %}
