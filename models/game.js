@@ -12,6 +12,9 @@ var gameSchema = new mongoose.Schema({
     phase: String
 });
 
+var c = [1, 0.5, 0.4, 1, 1, 1, 1, 1, 1, 10, 1, 1, 1, 1, 1, 1];
+var market_size = 1000; //THIS IS RANDOM!
+
 gameSchema.methods.calculateFirmStates = async function(cb){
     var self = this;
 
@@ -78,76 +81,82 @@ gameSchema.methods.calculateFirmStates = async function(cb){
         }
     }]);
 
-    var totals = {
-        budget_marketing: 0,
-        budget_research: 0,
-        unit_price: 0,
-        attractiveness: 0
-    };
+    if(
+        firms.map(function(f){return f.order.length > 0 ? 1 : 0}).reduce(function(acc, val){return acc + val;}, 0) == firms.length
+    ){
+        var totals = {
+            budget_marketing: 0,
+            budget_research: 0,
+            unit_price: 0,
+            attractiveness: 0
+        };
 
-    firms.forEach(function(firm){
-        totals.budget_marketing += firm.state.budget_marketing;
-        totals.budget_research += firm.state.budget_research;
-        totals.unit_price += firm.state.unit_price;
-    });
-    
-    firms = firms.map(function(firm){
-        var state = firm.state;
-        state._id = mongoose.Types.ObjectId();
-        state.isNew = true;
-        
-        //I'll need to poll these from some update queue...
-        state.budget_marketing = firm.order[0].budget_marketing;        
-        state.budget_research = firm.order[0].budget_research;        
-        state.productive_capacity = firm.order[0].productive_capacity;        
-        state.unit_price = firm.order[0].unit_price;        
+        firms.forEach(function(firm){
+            totals.budget_marketing += firm.state.budget_marketing;
+            totals.budget_research += firm.state.budget_research;
+            totals.unit_price += firm.state.unit_price;
+        });
 
-        UpdateOrder.deleteMany({firm: firm._id}, function(err){});
+        firms = firms.map(function(firm){
+            var state = firm.state;
+            state._id = mongoose.Types.ObjectId();
+            state.isNew = true;
 
-        var c = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-        var market_size = 10; //THIS IS RANDOM!
-        
-        state.attractiveness = c[4] + Math.exp(
-            c[1] * state.budget_marketing / totals.budget_marketing + 
-            c[2] * state.budget_research / totals.budget_research - 
-            c[3] * state.unit_price / totals.unit_price
-        );
+            //I'll need to poll these from some update queue...
+            state.budget_marketing = firm.order[0].budget_marketing;
+            state.budget_research = firm.order[0].budget_research;
+            state.productive_capacity = firm.order[0].productive_capacity;
+            state.unit_price = firm.order[0].unit_price;
 
-        //state.market_share = 1; //Since it's just one player right now...
-        
-        state.total_sales = Math.floor(Math.min(state.inventory, state.market_share * market_size));
-        state.inventory -= state.total_sales;
-        
-        state.total_funds -= state.budget_marketing;
-        state.total_funds -= state.budget_research;
-        
-        state.unit_cost = c[5] + (c[6] + c[7] * state.max_productive_rate) / (1 + c[8] * state.productive_capacity) + 
-          Math.max(c[9] / (1 + c[10] * state.budget_research), c[11]) + c[12] / state.max_productive_rate;
-        
-        state.total_funds += (state.unit_price - state.unit_cost) * state.total_sales;
-        
-        state.inventory += state.productive_capacity;
-        
-        state.turn++;
-        
+            UpdateOrder.deleteMany({firm: firm._id}, function(err){});
 
-        firm.state = state;
-        return firm;
-    });
+            state.attractiveness = c[4] + Math.exp(
+                c[1] * state.budget_marketing / totals.budget_marketing + 
+                c[2] * state.budget_research / totals.budget_research - 
+                c[3] * state.unit_price / totals.unit_price
+            );
 
-    firms.forEach(function(firm){
-        totals.attractiveness += firm.state.attractiveness;
-    });
+            firm.state = state;
+            return firm;
+        });
 
-    firms = firms.map(function(firm){
-        firm.state.market_share = firm.state.attractiveness / totals.attractiveness;
+        firms.forEach(function(firm){
+            totals.attractiveness += firm.state.attractiveness;
+        });
 
-        (new FirmState(firm.state)).save();
+        firms = firms.map(function(firm){
+            var state = firm.state;
+            state.market_share = firm.state.attractiveness / totals.attractiveness;
 
-        return firm;
-    });
+            //state.market_share = 1; //Since it's just one player right now...
 
-    return firms;
+            state.total_sales = Math.floor(Math.min(state.inventory, state.market_share * market_size));
+            state.inventory -= state.total_sales;
+
+            state.total_funds -= state.budget_marketing;
+            state.total_funds -= state.budget_research;
+
+            state.unit_cost = c[5] + (c[6] + c[7] * state.max_productive_rate) / (1 + c[8] * state.productive_capacity) + 
+              Math.max(c[9] / (1 + c[10] * state.budget_research), c[11]) + c[12] / state.max_productive_rate;
+
+            //state.total_funds += (state.unit_price - state.unit_cost) * state.total_sales;
+	    	state.total_funds += state.unit_price * state.total_sales;
+	    	state.total_funds -= state.unit_cost * state.productive_capacity;
+
+            state.inventory += state.productive_capacity;
+
+            state.turn++;
+            firm.state = state;
+
+            (new FirmState(firm.state)).save();
+
+            return firm;
+        });
+
+        return firms;
+    }else{
+        return [];
+    }
 }
 
 module.exports = mongoose.model("Game", gameSchema);

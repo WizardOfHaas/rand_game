@@ -18,10 +18,14 @@ router.get('/', function(req, res, next) {
 function createFirm(options, cb){ //This will need logic to see if we need to create or find a user
   Firm.create({
     name: options.name,
-    is_gm: options.is_gm,
+    is_gm: options.is_gm == "on" ? true : false,
     game: options.game
   }, function(err, firm){
-    firm.initState();
+    if(err){
+        console.log(err);
+    }else{
+        firm.initState();
+    }
 
     cb(err, firm);
   });
@@ -32,7 +36,7 @@ router.post('/firm/new', function(req, res, next){
     Game.create({name: req.body.game}, function(err, game){
       createFirm({
         name: req.body.firm_name,
-        is_gm: false,
+        is_gm: req.body.is_gm,
         game: game._id
       }, function(err, firm){
         res.redirect('/game/' + req.body.game + "/" + firm._id)
@@ -42,7 +46,7 @@ router.post('/firm/new', function(req, res, next){
     Game.findOne({name: req.body.game}, function(err, game){
       createFirm({
         name: req.body.firm_name,
-        is_gm: false,
+        is_gm: req.body.firm_name.is_gm,
         game: game._id
       }, function(err, firm){
         res.redirect('/game/' + req.body.game + "/" + firm._id)
@@ -124,7 +128,7 @@ router.post('/firm/:firm_id/update', async function(req, res, next){
   });
 
   var sentOrder = await order.save();
-  //var firms = await firm.game.calculateFirmStates();
+  var firms = await firm.game.calculateFirmStates();
 
   res.send({
     order: sentOrder,

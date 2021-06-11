@@ -2,11 +2,56 @@
 
 {% block content %}
     <div class="row">
+        <div class="col-md-12">
+            <div class="row bordered">
+                <div class="col-md-7 bordered">
+                    <h4>STATEMENT OF ASSETS</h4>
+                
+                    <table id="asset-table" class="score-table">
+                        <tbody>
+                            <th><td></td> <td></td> <td></td> <td>TOTAL</td> <td>NET CHANGE</td></th>
+                            <tr><td>CASH</td></tr>
+                            <tr><td>INVENTORY</td></tr>
+                            <tr><td>PLANT INVESTMENT</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            
+                <div class="col-md5 bordered">
+                    <h4>ANUAL STATEMENTS</h4>
+                </div>
+            </div>
+
+            <div class="row bordered">
+                <div class="col-md-5 bordered">
+                    <h4>INCOME STATEMENT</h4>
+                </div>
+
+                <div class="col-md-7">
+                    <div class="row">
+                        <div class="col-md-12 bordered">
+                            <h4>MARKET INFORMATION</h4>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12 bordered">
+                            <h4>MARKET RESEARCH REPORT</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
         <div class="col-md-4">
             <h2>{{ firm.name }}</h2>
             <p>...A {{ game.name }} company</p>
 
+            {% if firm.is_gm %}
             <button id="run-model">Run Model</button>
+            {% endif %}
         </div>
 
         <div class="col-md-8">
@@ -16,6 +61,7 @@
                         <th>Firm</th>
                         <th>Market Share</th>
                         <th>{{ game.name }} Sold</th>
+                        <th>Price of {{ game.name }}</th>
                     </thead>
 
                     <tbody>
@@ -114,7 +160,8 @@
                             "<tr><td>" + [
                                 firm.name,
                                 100 * firm.state.market_share.toFixed(2),
-                                firm.state.total_sales
+                                firm.state.total_sales,
+                                formatMoney(firm.state.unit_price)
                             ].join("</td><td>") + "</td></tr>"
                         );
                     }
@@ -123,7 +170,7 @@
         }
 
         function updateMoneyPane(state){
-            var out = state.budget_marketing + state.budget_research + state.unit_cost * state.total_sales;
+            var out = state.budget_marketing + state.budget_research + state.unit_cost * state.productive_capacity;
             var income = state.total_sales * state.unit_price;
 
             $("#firm-status").html(
@@ -155,6 +202,7 @@
 
         function getInitialStatus(){
             $.get('/firm/{{ firm._id }}/state', function(d){
+
                 updateMoneyPane(d[d.length - 1]);
 
                 d.forEach(function(entry){
@@ -167,6 +215,7 @@
 
         function updateTable(state){
             $("#loading-table").addClass("hidden");
+            $("input, table button").attr("disabled", false);
 
             $("#summary-table").prepend(
                 "<tr><td>" + [
@@ -180,7 +229,8 @@
                     state.inventory,
                     formatMoney(state.unit_cost),
                     formatMoney(state.unit_price),
-                    state.total_sales
+                    state.total_sales,
+                    state.attractiveness.toFixed(2)
                 ].join("</td><td>") + "</td></tr>"
             );
 
@@ -192,8 +242,10 @@
 
         getInitialStatus();
 
+        //Need input validation on marginal change values
         $("#update button").on("click", function(){
             $("#loading-table").removeClass("hidden");
+            $("input, table button").attr("disabled", true);
 
             $.post("/firm/{{ firm.id }}/update", {
                 budget_marketing: $("#budget_marketing").val(),
@@ -202,6 +254,8 @@
                 unit_price: $("#unit_price").val()
             }, function(d){
                 console.log(d);
+
+                clearInterval(pollInterval);
 
                 pollInterval = window.setInterval(function(){
                     updateEverything(function(){
@@ -215,7 +269,9 @@
             $.post("/gm/{{ game.name }}/run", function(d){
                 console.log(d);
 
-                updateEverything();
+                if(d.lenght > 0){
+                    updateEverything();
+                }
             });
         });
     </script>

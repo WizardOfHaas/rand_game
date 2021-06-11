@@ -17,15 +17,15 @@ firmSchema.methods.initState = function(cb){
         firm: this._id,
         turn: 0,
         total_sales: 0,
-        unit_price: 1,
-        unit_cost: 1,
-        inventory: 100,
-        max_productive_rate: 100,
+        unit_price: 10,
+        unit_cost: 10,
+        inventory: 1000,
+        max_productive_rate: 1000,
         market_share: 0,
-        budget_marketing: 1,
-        budget_research: 1,
+        budget_marketing: 50,
+        budget_research: 50,
         productive_capacity: 10,
-        total_funds: 100,
+        total_funds: 10000,
         attractiveness: 0
     }, function(err, state){
         if(cb){
